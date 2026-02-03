@@ -170,7 +170,33 @@ function obtainKnownNetworkSSIDs() {
 
 function obtainWirelessScanResults() {
   $output = executeServerControlActionWithResult('scan_wireless_networks');
-  return parseJSON(join("\n", $output));
+  if (empty($output)) return array();
+
+  // Combine array lines into a single string
+  $jsonString = join("\n", $output);
+
+  // Convert non-standard hex escapes (e.g., \xCE) into binary characters.
+  $jsonString = preg_replace_callback('/\\\\x([0-9A-Fa-f]{2})/', function($m) {
+    return chr(hexdec($m[1]));
+  }, $jsonString);
+
+  // Ensure valid UTF-8 encoding (requires php7.3-mbstring extension)
+  if (function_exists('mb_convert_encoding')) {
+    $jsonString = mb_convert_encoding($jsonString, 'UTF-8', 'UTF-8');
+  }
+
+  // Handle the null byte SSID specifically to prevent string termination issues
+  $jsonString = str_replace("\0", "Hidden Network", $jsonString);
+
+  $data = json_decode($jsonString, true);
+
+  // Error handling for the JSON parser
+  if (json_last_error() !== JSON_ERROR_NONE) {
+    bm_error("JSON Decoding Error: " . json_last_error_msg());
+    return array();
+  }
+
+  return $data;
 }
 
 function obtainConnectedNetworkSSID() {
